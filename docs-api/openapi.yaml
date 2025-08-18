@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+    title: API DELPI
+    version: 1.0.0
+    description: "Documentação da API DELPI. Endpoints protegidos por JWT (Bearer). Use o botão Authorize no Swagger UI e informe Bearer <seu_token>."
+servers:
+    - url: http://localhost:3000/api
+
+components:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+
+    responses:
+        UnauthorizedError:
+            description: "Não autorizado (token ausente/expirado ou inválido)"
+        InternalError:
+            description: "Erro interno inesperado"
+
+    schemas:
+        Product:
+            type: object
+            properties:
+                B1_GRUPO:
+                    type: string
+                B1_COD:
+                    type: string
+                B1_DESC:
+                    type: string
+                B1_TIPO:
+                    type: string
+
+        ProductGroupItem:
+            type: object
+            properties:
+                B1_COD:
+                    type: string
+                B1_GRUPO:
+                    type: string
+                B1_DESC:
+                    type: string
+
+        StructureNode:
+            type: object
+            properties:
+                G1_COD:
+                    type: string
+                G1_COMP:
+                    type: string
+                G1_OBSERV:
+                    type: string
+                    nullable: true
+                subStructure:
+                    type: array
+                    items:
+                        $ref: "#/components/schemas/StructureNode"
+
+        ProductWithStructure:
+            type: object
+            properties:
+                B1_COD:
+                    type: string
+                B1_DESC:
+                    type: string
+                B1_GRUPO:
+                    type: string
+                structureProduct:
+                    type: array
+                    items:
+                        $ref: "#/components/schemas/StructureNode"
+
+        PaginatedProducts:
+            type: object
+            properties:
+                data:
+                    type: array
+                    items:
+                        $ref: "#/components/schemas/Product"
+                page:
+                    type: integer
+                    example: 1
+                limit:
+                    type: integer
+                    example: 50
+                total:
+                    type: integer
+                    example: 1234
+
+        PaginatedProductsByGroup:
+            type: object
+            properties:
+                data:
+                    type: array
+                    items:
+                        $ref: "#/components/schemas/ProductGroupItem"
+                page:
+                    type: integer
+                    example: 1
+                limit:
+                    type: integer
+                    example: 50
+                total:
+                    type: integer
+                    example: 321
+
+security:
+    - bearerAuth: []
+
+tags:
+    - name: Produtos
+      description: "Consulta de produtos e estrutura"
+    - name: Sistema
+      description: "Catálogo do SQL Server (tabelas e colunas)"
+
+paths:
+    /products:
+        get:
+            summary: "Lista produtos (paginação + ordenação múltipla)"
+            tags:
+                - Produtos
+            parameters:
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema:
+                      type: integer
+                      minimum: 1
+                      default: 1
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–200)"
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 200
+                      default: 50
+                - in: query
+                  name: orderBy
+                  description: "Ordenação por múltiplas colunas no formato CSV. Cada item pode incluir direção (ASC/DESC). Exemplos: B1_COD | B1_DESC desc | B1_GRUPO asc,B1_COD asc"
+                  schema:
+                      type: string
+                      example: "B1_COD asc,B1_GRUPO asc"
+            responses:
+                "200":
+                    description: "Lista de produtos paginada"
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/PaginatedProducts"
+                "401":
+                    $ref: "#/components/responses/UnauthorizedError"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+    /products/code/{code}:
+        get:
+            summary: "Produto por código (com estrutura recursiva)"
+            tags:
+                - Produtos
+            parameters:
+                - in: path
+                  name: code
+                  required: true
+                  description: "Código exato do produto (ex.: DL000123)"
+                  schema:
+                      type: string
+            responses:
+                "200":
+                    description: "Produto encontrado + estrutura (BOM)"
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ProductWithStructure"
+                "401":
+                    $ref: "#/components/responses/UnauthorizedError"
+                "404":
+                    description: "Produto não encontrado"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+    /products/group/{group}:
+        get:
+            summary: "Produtos por grupo (paginação + ordenação múltipla)"
+            tags:
+                - Produtos
+            parameters:
+                - in: path
+                  name: group
+                  required: true
+                  description: "Código do grupo (ex.: CONEXOES)"
+                  schema:
+                      type: string
+                - in: query
+                  name: page
+                  schema:
+                      type: integer
+                      minimum: 1
+                      default: 1
+                - in: query
+                  name: limit
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 200
+                      default: 50
+                - in: query
+                  name: orderBy
+                  description: "CSV de colunas com direção. Ver regra em /products"
+                  schema:
+                      type: string
+                      example: "B1_DESC desc,B1_COD asc"
+            responses:
+                "200":
+                    description: "Lista filtrada e paginada por grupo"
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/PaginatedProductsByGroup"
+                "401":
+                    $ref: "#/components/responses/UnauthorizedError"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+    /system/tables:
+        get:
+            summary: "Lista tabelas do banco"
+            tags:
+                - Sistema
+            responses:
+                "200":
+                    description: "Lista de tabelas (com descrição quando houver)"
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items:
+                                    type: object
+                                    properties:
+                                        TableName:
+                                            type: string
+                                        Description:
+                                            type: string
+                                            nullable: true
+                "401":
+                    $ref: "#/components/responses/UnauthorizedError"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+    /system/tables/{tablename}/columns:
+        get:
+            summary: "Lista colunas de uma tabela (ordem física)"
+            tags:
+                - Sistema
+            parameters:
+                - in: path
+                  name: tablename
+                  required: true
+                  description: "Nome da tabela (somente letras, números e _)"
+                  schema:
+                      type: string
+            responses:
+                "200":
+                    description: "Colunas e descrições (quando houver)"
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items:
+                                    type: object
+                                    properties:
+                                        ColumnName:
+                                            type: string
+                                        Description:
+                                            type: string
+                                            nullable: true
+                "401":
+                    $ref: "#/components/responses/UnauthorizedError"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /health:
+        get:
+            summary: "Healthcheck (público)"
+            description: "Retorna 200 OK sem exigir autenticação"
+            security: [] # <- importante: remove o bearerAuth só nesse endpoint
+            responses:
+            "200":
+                description: "API online"
+                content:
+                text/plain:
+                    schema:
+                    type: string
+                    example: "API DELPI online e saudável!"
