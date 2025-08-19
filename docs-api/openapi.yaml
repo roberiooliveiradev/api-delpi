@@ -4,7 +4,7 @@ info:
     version: 1.0.0
     description: "Documentação da API DELPI. Endpoints protegidos por JWT (Bearer). Use o botão Authorize no Swagger UI e informe Bearer <seu_token>."
 servers:
-    - url: http://localhost:3000/api
+    - url: https://api-delpi.onrender.com/api
 
 components:
     securitySchemes:
