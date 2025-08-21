@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import systemRouter from "./routes/systemRoutes.js";
 import productRouter from "./routes/productRoutes.js";
+import salesOrderRouter from "./routes/salesOrderRoutes.js";
 import { jwtAuth } from "./middlewares/jwtAuth.js";
 
 import path from "path";
@@ -51,6 +52,7 @@ app.get("/api/openapi.json", (req, res) => res.json(openapiDoc));
 // Rotas
 app.use("/api/system", systemRouter);
 app.use("/api/products", productRouter);
+app.use("/api/sales-orders", salesOrderRouter);
 
 // Healthcheck (público)
 app.get("/health", (_req, res) => {

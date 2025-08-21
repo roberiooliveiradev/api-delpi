@@ -29,12 +29,7 @@ class ProductRepository extends BaseRepository {
         );
         const product = rows?.[0];
         if (!product) return null;
-
-        const structureProduct = await this.getRecursiveStructure(
-            product.B1_COD,
-            new Set()
-        );
-        return { ...product, structureProduct };
+        return product;
     }
 
     /**
@@ -63,6 +58,57 @@ class ProductRepository extends BaseRepository {
         );
 
         return enriched;
+    }
+
+    async getStructureByCode(
+        code,
+        { page = 1, limit = 50, orderBy = "G1_COD ASC" } = {}
+    ) {
+        const offset = (page - 1) * limit;
+
+        // Consulta direta na SG1010
+        const rows = await super.getAll(
+            "SG1010",
+            ["G1_COD", "G1_COMP", "G1_OBSERV"],
+            {
+                filters: { G1_COMP: code },
+                page,
+                limit,
+                orderBy,
+            }
+        );
+
+        return rows;
+    }
+
+    /**
+     * Retorna fornecedores e partnumbers de um produto com paginação
+     * Consulta SA5010 pelo código do produto
+     */
+    async getSuppliersByProduct(
+        code,
+        { page = 1, limit = 50, orderBy = "A5_FORNECE ASC" } = {}
+    ) {
+        const result = await super.getAll(
+            "SA5010",
+            ["A5_FORNECE", "A5_LOJA", "A5_NOMEFOR", "A5_CODPRF"],
+            {
+                filters: { A5_PRODUTO: code },
+                page,
+                limit,
+                orderBy,
+            }
+        );
+
+        return {
+            ...result,
+            data: result.data.map((r) => ({
+                fornecedor: r.A5_FORNECE,
+                loja: r.A5_LOJA,
+                nomeFornecedor: r.A5_NOMEFOR,
+                partNumber: r.A5_CODPRF,
+            })),
+        };
     }
 }
 

@@ -1,109 +1,10 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
     title: API DELPI
-    version: 1.0.0
-    description: "Documentação da API DELPI. Endpoints protegidos por JWT (Bearer). Use o botão Authorize no Swagger UI e informe Bearer <seu_token>."
+    version: 1.0.2
+    description: "Endpoints protegidos por JWT (Bearer). Use o botão Authorize no Swagger."
 servers:
-    - url: http://localhost:3000/api
-
-components:
-    securitySchemes:
-        bearerAuth:
-            type: http
-            scheme: bearer
-            bearerFormat: JWT
-
-    responses:
-        UnauthorizedError:
-            description: "Não autorizado (token ausente/expirado ou inválido)"
-        InternalError:
-            description: "Erro interno inesperado"
-
-    schemas:
-        Product:
-            type: object
-            properties:
-                B1_GRUPO:
-                    type: string
-                B1_COD:
-                    type: string
-                B1_DESC:
-                    type: string
-                B1_TIPO:
-                    type: string
-
-        ProductGroupItem:
-            type: object
-            properties:
-                B1_COD:
-                    type: string
-                B1_GRUPO:
-                    type: string
-                B1_DESC:
-                    type: string
-
-        StructureNode:
-            type: object
-            properties:
-                G1_COD:
-                    type: string
-                G1_COMP:
-                    type: string
-                G1_OBSERV:
-                    type: string
-                    nullable: true
-                subStructure:
-                    type: array
-                    items:
-                        $ref: "#/components/schemas/StructureNode"
-
-        ProductWithStructure:
-            type: object
-            properties:
-                B1_COD:
-                    type: string
-                B1_DESC:
-                    type: string
-                B1_GRUPO:
-                    type: string
-                structureProduct:
-                    type: array
-                    items:
-                        $ref: "#/components/schemas/StructureNode"
-
-        PaginatedProducts:
-            type: object
-            properties:
-                data:
-                    type: array
-                    items:
-                        $ref: "#/components/schemas/Product"
-                page:
-                    type: integer
-                    example: 1
-                limit:
-                    type: integer
-                    example: 50
-                total:
-                    type: integer
-                    example: 1234
-
-        PaginatedProductsByGroup:
-            type: object
-            properties:
-                data:
-                    type: array
-                    items:
-                        $ref: "#/components/schemas/ProductGroupItem"
-                page:
-                    type: integer
-                    example: 1
-                limit:
-                    type: integer
-                    example: 50
-                total:
-                    type: integer
-                    example: 321
+    - url: https://2865dccc45a5.ngrok-free.app/api
 
 security:
     - bearerAuth: []
@@ -113,121 +14,461 @@ tags:
       description: "Consulta de produtos e estrutura"
     - name: Sistema
       description: "Catálogo do SQL Server (tabelas e colunas)"
+    - name: Pedidos de Vendas
+      description: "Consulta de pedidos de vendas (cabeçalho + itens)"
+
+components:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+
+    ########################################################
+    # (3) Respostas e modelo de erro (RFC 7807)
+    ########################################################
+    schemas:
+        ProblemDetails:
+            type: object
+            properties:
+                type: { type: string, format: uri }
+                title: { type: string }
+                status: { type: integer }
+                detail: { type: string }
+                instance: { type: string }
+
+        ######################################################
+        # (2) Schemas reutilizáveis e paginação genérica
+        ######################################################
+        PageMeta:
+            type: object
+            properties:
+                page: { type: integer, example: 1 }
+                limit: { type: integer, example: 50 }
+                total: { type: integer, example: 1234 }
+
+        PaginatedBase:
+            allOf:
+                - $ref: "#/components/schemas/PageMeta"
+                - type: object
+                  properties:
+                      data: {}
+
+        Product:
+            type: object
+            properties:
+                B1_GRUPO: { type: string }
+                B1_COD: { type: string }
+                B1_DESC: { type: string }
+                B1_TIPO: { type: string }
+
+        ProductGroupItem:
+            type: object
+            properties:
+                B1_COD: { type: string }
+                B1_GRUPO: { type: string }
+                B1_DESC: { type: string }
+
+        # Quebra de recursão para agradar ferramentas que não aceitam recursão infinita
+        StructureLeaf:
+            type: object
+            properties:
+                G1_COD: { type: string }
+                G1_COMP: { type: string }
+                G1_OBSERV:
+                    type: [string, "null"]
+
+        Supplier:
+            type: object
+            properties:
+                fornecedor:
+                    { type: string, description: "Código do fornecedor" }
+                loja: { type: string, description: "Loja do fornecedor" }
+                nomeFornecedor:
+                    { type: string, description: "Nome do fornecedor" }
+                partNumber:
+                    type: string
+                    description: "Código do produto no fornecedor (partnumber)"
+
+        SalesOrderItem:
+            type: object
+            properties:
+                C6_NUM: { type: string, description: "Código do pedido" }
+                C5_EMISSAO:
+                    type: [string, "null"]
+                    format: date
+                C6_FILIAL: { type: string }
+                C6_CLI: { type: string }
+                C6_LOJA: { type: string }
+                A1_NREDUZ:
+                    type: [string, "null"]
+                    description: "Cliente (nome reduzido)"
+                C6_ITEM: { type: string }
+                C6_PRODUTO: { type: string }
+                B1_DESC:
+                    type: [string, "null"]
+                    description: "Descrição do produto"
+                C6_QTDVEN: { type: number }
+                C6_QTDENT: { type: number }
+                C6_ENTREG:
+                    type: [string, "null"]
+                    description: "Data planejada de entrega (formato Protheus yyyymmdd)"
+                C6_VALOR: { type: number }
+
+        SalesOrderDetail:
+            type: object
+            properties:
+                C5_NUM: { type: string }
+                C5_EMISSAO:
+                    type: string
+                    format: date
+                C6_FILIAL: { type: string }
+                C6_CLI: { type: string }
+                C6_LOJA: { type: string }
+                A1_NREDUZ: { type: [string, "null"] }
+                items:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            C6_NUM: { type: string }
+                            C6_ITEM: { type: string }
+                            C6_PRODUTO: { type: string }
+                            B1_DESC: { type: [string, "null"] }
+                            C6_QTDVEN: { type: number }
+                            C6_QTDENT: { type: number }
+                            C6_ENTREG: { type: [string, "null"] }
+                            C6_VALOR: { type: number }
+
+        # Específicos de paginação usando composição
+        PaginatedProducts:
+            allOf:
+                - $ref: "#/components/schemas/PaginatedBase"
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: "#/components/schemas/Product" }
+
+        PaginatedProductsByGroup:
+            allOf:
+                - $ref: "#/components/schemas/PaginatedBase"
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items:
+                              { $ref: "#/components/schemas/ProductGroupItem" }
+
+        PaginatedSuppliers:
+            allOf:
+                - $ref: "#/components/schemas/PaginatedBase"
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: "#/components/schemas/Supplier" }
+
+        PaginatedSalesOrderItems:
+            allOf:
+                - $ref: "#/components/schemas/PaginatedBase"
+                - type: object
+                  properties:
+                      data:
+                          type: array
+                          items: { $ref: "#/components/schemas/SalesOrderItem" }
+
+    responses:
+        UnauthorizedError:
+            description: "Não autorizado (token ausente/expirado ou inválido)"
+            content:
+                application/problem+json:
+                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+        InternalError:
+            description: "Erro interno inesperado"
+            content:
+                application/problem+json:
+                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+        NotFoundError:
+            description: "Recurso não encontrado"
+            content:
+                application/problem+json:
+                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+
+    ########################################################
+    # (2) Parameters reutilizáveis (query e path)
+    ########################################################
+    parameters:
+        Page:
+            name: page
+            in: query
+            description: "Número da página (>= 1)"
+            schema: { type: integer, minimum: 1, default: 1 }
+
+        # Limite padrão (1–200) para a maioria dos endpoints
+        Limit:
+            name: limit
+            in: query
+            description: "Tamanho da página (1–200)"
+            schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+        # Limite maior exclusivo de /products (mantém comportamento original 1–1000)
+        LimitLarge:
+            name: limit
+            in: query
+            description: "Tamanho da página (1–1000)"
+            schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+
+        OrderBy:
+            name: orderBy
+            in: query
+            description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+            schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
+
+        CodePath:
+            name: code
+            in: path
+            required: true
+            description: "Código do produto (ex.: 10080123)"
+            schema: { type: string }
+
+        GroupPath:
+            name: group
+            in: path
+            required: true
+            description: "Código do grupo (ex.: CONEXOES)"
+            schema: { type: string }
+
+        TableNamePath:
+            name: tablename
+            in: path
+            required: true
+            description: "Nome da tabela (somente letras, números e _)"
+            schema:
+                type: string
+                pattern: "^[A-Za-z0-9_]+$"
+
+        NumPath:
+            name: num
+            in: path
+            required: true
+            description: "Código do pedido (C5/C6_NUM)"
+            schema: { type: string }
+
+    ########################################################
+    # (4) pathItems para padrões repetidos
+    ########################################################
+    pathItems:
+        ProductByCode:
+            parameters:
+                - $ref: "#/components/parameters/CodePath"
+        ProductByGroup:
+            parameters:
+                - $ref: "#/components/parameters/GroupPath"
+        SystemTableColumns:
+            parameters:
+                - $ref: "#/components/parameters/TableNamePath"
+        SalesOrderByNum:
+            parameters:
+                - $ref: "#/components/parameters/NumPath"
 
 paths:
     /products:
         get:
+            operationId: listProducts
             summary: "Lista produtos (paginação + ordenação múltipla)"
-            tags:
-                - Produtos
+            tags: [Produtos]
             parameters:
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema:
-                      type: integer
-                      minimum: 1
-                      default: 1
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–200)"
-                  schema:
-                      type: integer
-                      minimum: 1
-                      maximum: 200
-                      default: 50
-                - in: query
-                  name: orderBy
-                  description: "Ordenação por múltiplas colunas no formato CSV. Cada item pode incluir direção (ASC/DESC). Exemplos: B1_COD | B1_DESC desc | B1_GRUPO asc,B1_COD asc"
-                  schema:
-                      type: string
-                      example: "B1_COD asc,B1_GRUPO asc"
+                - $ref: "#/components/parameters/Page"
+                - $ref: "#/components/parameters/LimitLarge"
+                - $ref: "#/components/parameters/OrderBy"
             responses:
                 "200":
                     description: "Lista de produtos paginada"
                     content:
                         application/json:
                             schema:
-                                $ref: "#/components/schemas/PaginatedProducts"
-                "401":
-                    $ref: "#/components/responses/UnauthorizedError"
-                "500":
-                    $ref: "#/components/responses/InternalError"
+                                {
+                                    $ref: "#/components/schemas/PaginatedProducts",
+                                }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "500": { $ref: "#/components/responses/InternalError" }
 
     /products/code/{code}:
+        $ref: "#/components/pathItems/ProductByCode"
         get:
-            summary: "Produto por código (com estrutura recursiva)"
-            tags:
-                - Produtos
-            parameters:
-                - in: path
-                  name: code
-                  required: true
-                  description: "Código exato do produto (ex.: DL000123)"
-                  schema:
-                      type: string
+            operationId: getProductByCode
+            summary: "Produto por código"
+            tags: [Produtos]
             responses:
                 "200":
-                    description: "Produto encontrado + estrutura (BOM)"
+                    description: "Produto encontrado"
                     content:
                         application/json:
-                            schema:
-                                $ref: "#/components/schemas/ProductWithStructure"
-                "401":
-                    $ref: "#/components/responses/UnauthorizedError"
-                "404":
-                    description: "Produto não encontrado"
-                "500":
-                    $ref: "#/components/responses/InternalError"
+                            schema: { $ref: "#/components/schemas/Product" }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "404": { $ref: "#/components/responses/NotFoundError" }
+                "500": { $ref: "#/components/responses/InternalError" }
 
     /products/group/{group}:
+        $ref: "#/components/pathItems/ProductByGroup"
         get:
+            operationId: listProductsByGroup
             summary: "Produtos por grupo (paginação + ordenação múltipla)"
-            tags:
-                - Produtos
+            tags: [Produtos]
             parameters:
-                - in: path
-                  name: group
-                  required: true
-                  description: "Código do grupo (ex.: CONEXOES)"
-                  schema:
-                      type: string
-                - in: query
-                  name: page
-                  schema:
-                      type: integer
-                      minimum: 1
-                      default: 1
-                - in: query
-                  name: limit
-                  schema:
-                      type: integer
-                      minimum: 1
-                      maximum: 200
-                      default: 50
-                - in: query
-                  name: orderBy
-                  description: "CSV de colunas com direção. Ver regra em /products"
-                  schema:
-                      type: string
-                      example: "B1_DESC desc,B1_COD asc"
+                - $ref: "#/components/parameters/Page"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/OrderBy"
             responses:
                 "200":
                     description: "Lista filtrada e paginada por grupo"
                     content:
                         application/json:
                             schema:
-                                $ref: "#/components/schemas/PaginatedProductsByGroup"
-                "401":
-                    $ref: "#/components/responses/UnauthorizedError"
-                "500":
-                    $ref: "#/components/responses/InternalError"
+                                {
+                                    $ref: "#/components/schemas/PaginatedProductsByGroup",
+                                }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
+    /products/code/{code}/structure:
+        $ref: "#/components/pathItems/ProductByCode"
+        get:
+            operationId: listProductStructure
+            summary: "Lista a estrutura (BOM) de um produto com paginação"
+            tags: [Produtos]
+            parameters:
+                - $ref: "#/components/parameters/Page"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/OrderBy"
+            responses:
+                "200":
+                    description: "Componentes do produto paginados"
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/PaginatedBase"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  {
+                                                      $ref: "#/components/schemas/StructureLeaf",
+                                                  }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "404": { $ref: "#/components/responses/NotFoundError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
+    /products/code/{code}/suppliers:
+        $ref: "#/components/pathItems/ProductByCode"
+        get:
+            operationId: listProductSuppliers
+            summary: "Lista fornecedores de um produto com paginação"
+            tags: [Produtos]
+            parameters:
+                - $ref: "#/components/parameters/Page"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/OrderBy"
+            responses:
+                "200":
+                    description: "Fornecedores do produto paginados"
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: "#/components/schemas/PaginatedSuppliers",
+                                }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "404": { $ref: "#/components/responses/NotFoundError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
+    /sales-orders:
+        get:
+            operationId: listSalesOrderItems
+            summary: "Lista itens de pedidos (paginação + filtros)"
+            tags: [Pedidos de Vendas]
+            parameters:
+                - $ref: "#/components/parameters/Page"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/OrderBy"
+                - in: query
+                  name: num
+                  schema: { type: string }
+                - in: query
+                  name: cli
+                  schema: { type: string }
+                - in: query
+                  name: loja
+                  schema: { type: string }
+                - in: query
+                  name: filial
+                  schema: { type: string }
+                - in: query
+                  name: produto
+                  schema: { type: string }
+                - in: query
+                  name: emissaoFrom
+                  description: "Data de emissão inicial (YYYY-MM-DD)"
+                  schema: { type: string, format: date }
+                - in: query
+                  name: emissaoTo
+                  description: "Data de emissão final (YYYY-MM-DD)"
+                  schema: { type: string, format: date }
+                - in: query
+                  name: entregaFrom
+                  description: "Data de entrega inicial (YYYY-MM-DD)"
+                  schema: { type: string, format: date }
+                - in: query
+                  name: entregaTo
+                  description: "Data de entrega final (YYYY-MM-DD)"
+                  schema: { type: string, format: date }
+                - in: query
+                  name: pending
+                  description: "true = pendente (QTDENT < QTDVEN), false = entregue"
+                  schema: { type: boolean }
+                - in: query
+                  name: overdue
+                  description: "true = em atraso (C6_ENTREG < hoje e QTDENT < QTDVEN)"
+                  schema: { type: boolean }
+            responses:
+                "200":
+                    description: "Itens de pedidos filtrados e paginados"
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: "#/components/schemas/PaginatedSalesOrderItems",
+                                }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
+    /sales-orders/{num}:
+        $ref: "#/components/pathItems/SalesOrderByNum"
+        get:
+            operationId: getSalesOrderByNum
+            summary: "Pedido por código (cabeçalho + itens)"
+            tags: [Pedidos de Vendas]
+            responses:
+                "200":
+                    description: "Pedido encontrado"
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: "#/components/schemas/SalesOrderDetail",
+                                }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "404": { $ref: "#/components/responses/NotFoundError" }
+                "500": { $ref: "#/components/responses/InternalError" }
 
     /system/tables:
         get:
+            operationId: listTables
             summary: "Lista tabelas do banco"
-            tags:
-                - Sistema
+            tags: [Sistema]
             responses:
                 "200":
                     description: "Lista de tabelas (com descrição quando houver)"
@@ -238,28 +479,17 @@ paths:
                                 items:
                                     type: object
                                     properties:
-                                        TableName:
-                                            type: string
-                                        Description:
-                                            type: string
-                                            nullable: true
-                "401":
-                    $ref: "#/components/responses/UnauthorizedError"
-                "500":
-                    $ref: "#/components/responses/InternalError"
+                                        TableName: { type: string }
+                                        Description: { type: [string, "null"] }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "500": { $ref: "#/components/responses/InternalError" }
 
     /system/tables/{tablename}/columns:
+        $ref: "#/components/pathItems/SystemTableColumns"
         get:
+            operationId: listColumns
             summary: "Lista colunas de uma tabela (ordem física)"
-            tags:
-                - Sistema
-            parameters:
-                - in: path
-                  name: tablename
-                  required: true
-                  description: "Nome da tabela (somente letras, números e _)"
-                  schema:
-                      type: string
+            tags: [Sistema]
             responses:
                 "200":
                     description: "Colunas e descrições (quando houver)"
@@ -270,25 +500,21 @@ paths:
                                 items:
                                     type: object
                                     properties:
-                                        ColumnName:
-                                            type: string
-                                        Description:
-                                            type: string
-                                            nullable: true
-                "401":
-                    $ref: "#/components/responses/UnauthorizedError"
-                "500":
-                    $ref: "#/components/responses/InternalError"
+                                        ColumnName: { type: string }
+                                        Description: { type: [string, "null"] }
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
     /health:
         get:
+            operationId: healthCheck
             summary: "Healthcheck (público)"
-            description: "Retorna 200 OK sem exigir autenticação"
-            security: [] # <- importante: remove o bearerAuth só nesse endpoint
+            security: []
             responses:
-            "200":
-                description: "API online"
-                content:
-                text/plain:
-                    schema:
-                    type: string
-                    example: "API DELPI online e saudável!"
+                "200":
+                    description: "API online"
+                    content:
+                        text/plain:
+                            schema:
+                                type: string
+                                example: "API DELPI online e saudável!"

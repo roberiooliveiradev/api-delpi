@@ -80,6 +80,57 @@ router.get(
     })
 );
 
+// GET /api/products/code/:code/structure -> { data, page, limit, total }
+router.get(
+    "/code/:code/structure",
+    validate(
+        z.object({
+            params: z.object({
+                code: z.string().min(1, "Informe o código do produto"),
+            }),
+            query: listQuerySchema.shape.query,
+        })
+    ),
+    asyncHandler(async (req, res) => {
+        const { code } = req.params;
+        const { page = 1, limit = 50, orderBy } = req.query;
+        const order = parseOrderByCSV(orderBy) || ["G1_COD ASC"];
+
+        const result = await repo.getStructureByCode(code, {
+            page: Number(page),
+            limit: Number(limit),
+            orderBy: order,
+        });
+        res.status(200).json(result);
+    })
+);
+
+// GET /api/products/code/:code/suppliers -> { data, page, limit, total }
+router.get(
+    "/code/:code/suppliers",
+    validate(
+        z.object({
+            params: z.object({
+                code: z.string().min(1, "Informe o código do produto"),
+            }),
+            query: listQuerySchema.shape.query,
+        })
+    ),
+    asyncHandler(async (req, res) => {
+        const { code } = req.params;
+        const { page = 1, limit = 50, orderBy } = req.query;
+        const order = parseOrderByCSV(orderBy) || ["A5_FORNECE ASC"];
+
+        const result = await repo.getSuppliersByProduct(code, {
+            page: Number(page),
+            limit: Number(limit),
+            orderBy: order,
+        });
+
+        res.status(200).json(result);
+    })
+);
+
 // GET /api/products/group/:group -> { data, page, limit, total }
 router.get(
     "/group/:group",

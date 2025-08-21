@@ -16,7 +16,7 @@ function sanitizeIdentifier(identifier) {
  * - array de strings: ["B1_GRUPO ASC", "B1_COD DESC"]
  * - array de objetos: [{ column: "B1_GRUPO", dir: "ASC" }, { column: "B1_COD", dir: "DESC" }]
  */
-function buildSafeOrderBy(orderBy, fallbackColumn = "1") {
+export function buildSafeOrderBy(orderBy, fallbackColumn = "1") {
     if (!orderBy) return fallbackColumn;
 
     const toPair = (item) => {
@@ -159,6 +159,7 @@ class BaseRepository {
         // COUNT(*) com os mesmos filtros
         let countQuery = `SELECT COUNT(*) AS total FROM ${safeTable}`;
         if (whereClauses.length) {
+            whereClauses.push(`ISNULL(D_E_L_E_T_, '') <> '*'`);
             countQuery += ` WHERE ${whereClauses.join(" AND ")}`;
         }
         const countResult = await requestCount.query(countQuery);
