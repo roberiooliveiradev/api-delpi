@@ -56,6 +56,11 @@ components:
                 B1_DESC: { type: string }
                 B1_TIPO: { type: string }
 
+        ProductFull:
+            type: object
+            description: "Registro completo de produto"
+            additionalProperties: true
+
         ProductGroupItem:
             type: object
             properties:
@@ -239,7 +244,7 @@ paths:
                     description: "Produto encontrado"
                     content:
                         application/json:
-                            schema: { $ref: "#/components/schemas/Product" }
+                            schema: { $ref: "#/components/schemas/ProductFull" }
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }

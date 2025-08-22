@@ -21,13 +21,15 @@ class ProductRepository extends BaseRepository {
     }
 
     async getProductByCode(code) {
-        const rows = await super.getByValue(
-            "SB1010",
-            ["B1_COD", "B1_DESC", "B1_GRUPO"],
-            code,
-            "B1_COD"
-        );
+        // const rows = await super.getByValue(
+        //     "SB1010",
+        //     ["B1_COD", "B1_DESC", "B1_GRUPO"],
+        //     code,
+        //     "B1_COD"
+        // );
+        const rows = await super.getByValue("SB1010", ["*"], code, "B1_COD");
         const product = rows?.[0];
+        const suppliers = this.getSuppliersByProduct(code);
         if (!product) return null;
         return product;
     }
@@ -89,16 +91,12 @@ class ProductRepository extends BaseRepository {
         code,
         { page = 1, limit = 50, orderBy = "A5_FORNECE ASC" } = {}
     ) {
-        const result = await super.getAll(
-            "SA5010",
-            ["A5_FORNECE", "A5_LOJA", "A5_NOMEFOR", "A5_CODPRF"],
-            {
-                filters: { A5_PRODUTO: code },
-                page,
-                limit,
-                orderBy,
-            }
-        );
+        const result = await super.getAll("SA5010", ["*"], {
+            filters: { A5_PRODUTO: code },
+            page,
+            limit,
+            orderBy,
+        });
 
         return {
             ...result,
