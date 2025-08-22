@@ -190,7 +190,7 @@ class BaseRepository {
         const dataResult = await requestData.query(dataQuery);
 
         return {
-            data: dataResult.recordset,
+            data: trimRecordset(dataResult.recordset),
             page: Number(page ?? 1),
             limit: Number(limit ?? dataResult.recordset.length),
             total,
@@ -211,8 +211,23 @@ class BaseRepository {
         const query = `SELECT ${safeColumns} FROM ${safeTable} WHERE ${safeKeyColumn} = @id`;
 
         const result = await pool.request().input("id", keyValue).query(query);
-        return result.recordset;
+        return trimRecordset(result.recordset);
     }
+}
+
+// Função utilitária para remover espaços de todos os campos string
+function trimObjectStrings(obj) {
+    return Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [
+            key,
+            typeof value === "string" ? value.trim() : value,
+        ])
+    );
+}
+
+// Caso seja uma lista de objetos
+function trimRecordset(recordset) {
+    return recordset.map((item) => trimObjectStrings(item));
 }
 
 export default BaseRepository;
