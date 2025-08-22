@@ -24,6 +24,32 @@ components:
             scheme: bearer
             bearerFormat: JWT
 
+    parameters:
+        PageParam:
+            in: query
+            name: page
+            description: "Número da página (>= 1)"
+            schema:
+                type: integer
+                minimum: 1
+                default: 1
+        LimitParam:
+            in: query
+            name: limit
+            description: "Tamanho da página (1–1000)"
+            schema:
+                type: integer
+                minimum: 1
+                maximum: 1000
+                default: 50
+        OrderByParam:
+            in: query
+            name: orderBy
+            description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+            schema:
+                type: string
+                # example: "COLUNA1 desc,COLUNA2 asc"
+
     schemas:
         ProblemDetails:
             type: object
@@ -34,6 +60,11 @@ components:
                 detail: { type: string }
                 instance: { type: string }
 
+        NullableString:
+            anyOf:
+                - type: string
+                - type: "null"
+
         PageMeta:
             type: object
             properties:
@@ -41,12 +72,13 @@ components:
                 limit: { type: integer, example: 50 }
                 total: { type: integer, example: 1234 }
 
-        PaginatedBase:
+        # Wrapper genérico para respostas paginadas
+        Paginated:
             allOf:
                 - $ref: "#/components/schemas/PageMeta"
                 - type: object
                   properties:
-                      data: {}
+                      data: {} # Especializado no uso por endpoint via allOf
 
         Product:
             type: object
@@ -74,46 +106,36 @@ components:
                 G1_COD: { type: string }
                 G1_COMP: { type: string }
                 G1_OBSERV:
-                    type: [string, "null"]
+                    $ref: "#/components/schemas/NullableString"
 
         Supplier:
             type: object
-            properties:
-                fornecedor:
-                    type: string
-                    description: "Código do fornecedor"
-                loja:
-                    type: string
-                    description: "Loja do fornecedor"
-                nomeFornecedor:
-                    type: string
-                    description: "Nome do fornecedor"
-                partNumber:
-                    type: string
-                    description: "Código do produto no fornecedor (partnumber)"
+            additionalProperties: true
 
-        SalesOrderItem:
+        SalesOrderLine:
             type: object
             properties:
                 C6_NUM: { type: string, description: "Código do pedido" }
                 C5_EMISSAO:
-                    type: [string, "null"]
-                    format: date
+                    {
+                        anyOf:
+                            [{ type: string, format: date }, { type: "null" }],
+                    }
                 C6_FILIAL: { type: string }
                 C6_CLI: { type: string }
                 C6_LOJA: { type: string }
                 A1_NREDUZ:
-                    type: [string, "null"]
+                    $ref: "#/components/schemas/NullableString"
                     description: "Cliente (nome reduzido)"
                 C6_ITEM: { type: string }
                 C6_PRODUTO: { type: string }
                 B1_DESC:
-                    type: [string, "null"]
+                    $ref: "#/components/schemas/NullableString"
                     description: "Descrição do produto"
                 C6_QTDVEN: { type: number }
                 C6_QTDENT: { type: number }
                 C6_ENTREG:
-                    type: [string, "null"]
+                    $ref: "#/components/schemas/NullableString"
                     description: "Data planejada de entrega (formato Protheus yyyymmdd)"
                 C6_VALOR: { type: number }
 
@@ -121,80 +143,35 @@ components:
             type: object
             properties:
                 C5_NUM: { type: string }
-                C5_EMISSAO:
-                    type: string
-                    format: date
+                C5_EMISSAO: { type: string, format: date }
                 C6_FILIAL: { type: string }
                 C6_CLI: { type: string }
                 C6_LOJA: { type: string }
-                A1_NREDUZ: { type: [string, "null"] }
+                A1_NREDUZ: { $ref: "#/components/schemas/NullableString" }
                 items:
                     type: array
                     items:
-                        type: object
-                        properties:
-                            C6_NUM: { type: string }
-                            C6_ITEM: { type: string }
-                            C6_PRODUTO: { type: string }
-                            B1_DESC: { type: [string, "null"] }
-                            C6_QTDVEN: { type: number }
-                            C6_QTDENT: { type: number }
-                            C6_ENTREG: { type: [string, "null"] }
-                            C6_VALOR: { type: number }
-
-        PaginatedProducts:
-            allOf:
-                - $ref: "#/components/schemas/PaginatedBase"
-                - type: object
-                  properties:
-                      data:
-                          type: array
-                          items: { $ref: "#/components/schemas/Product" }
-
-        PaginatedProductsByGroup:
-            allOf:
-                - $ref: "#/components/schemas/PaginatedBase"
-                - type: object
-                  properties:
-                      data:
-                          type: array
-                          items:
-                              { $ref: "#/components/schemas/ProductGroupItem" }
-
-        PaginatedSuppliers:
-            allOf:
-                - $ref: "#/components/schemas/PaginatedBase"
-                - type: object
-                  properties:
-                      data:
-                          type: array
-                          items: { $ref: "#/components/schemas/Supplier" }
-
-        PaginatedSalesOrderItems:
-            allOf:
-                - $ref: "#/components/schemas/PaginatedBase"
-                - type: object
-                  properties:
-                      data:
-                          type: array
-                          items: { $ref: "#/components/schemas/SalesOrderItem" }
+                        $ref: "#/components/schemas/SalesOrderLine"
 
     responses:
         UnauthorizedError:
             description: "Não autorizado (token ausente/expirado ou inválido)"
             content:
                 application/problem+json:
-                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+                    schema:
+                        $ref: "#/components/schemas/ProblemDetails"
         InternalError:
             description: "Erro interno inesperado"
             content:
                 application/problem+json:
-                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+                    schema:
+                        $ref: "#/components/schemas/ProblemDetails"
         NotFoundError:
             description: "Recurso não encontrado"
             content:
                 application/problem+json:
-                    schema: { $ref: "#/components/schemas/ProblemDetails" }
+                    schema:
+                        $ref: "#/components/schemas/ProblemDetails"
 
 paths:
     /products:
@@ -203,28 +180,23 @@ paths:
             summary: "Lista produtos (paginação + ordenação múltipla)"
             tags: [Produtos]
             parameters:
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema: { type: integer, minimum: 1, default: 1 }
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–1000)"
-                  schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
-                - in: query
-                  name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-                  schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
+                - $ref: "#/components/parameters/PageParam"
+                - $ref: "#/components/parameters/LimitParam"
+                - $ref: "#/components/parameters/OrderByParam"
             responses:
                 "200":
                     description: "Lista de produtos paginada"
                     content:
                         application/json:
                             schema:
-                                {
-                                    $ref: "#/components/schemas/PaginatedProducts",
-                                }
+                                allOf:
+                                    - $ref: "#/components/schemas/Paginated"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/Product"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 
@@ -244,7 +216,8 @@ paths:
                     description: "Produto encontrado"
                     content:
                         application/json:
-                            schema: { $ref: "#/components/schemas/ProductFull" }
+                            schema:
+                                $ref: "#/components/schemas/ProductFull"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
@@ -260,28 +233,23 @@ paths:
                   required: true
                   description: "Código do grupo (ex.: CONEXOES)"
                   schema: { type: string }
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema: { type: integer, minimum: 1, default: 1 }
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–1000)"
-                  schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
-                - in: query
-                  name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-                  schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
+                - $ref: "#/components/parameters/PageParam"
+                - $ref: "#/components/parameters/LimitParam"
+                - $ref: "#/components/parameters/OrderByParam"
             responses:
                 "200":
                     description: "Lista filtrada e paginada por grupo"
                     content:
                         application/json:
                             schema:
-                                {
-                                    $ref: "#/components/schemas/PaginatedProductsByGroup",
-                                }
+                                allOf:
+                                    - $ref: "#/components/schemas/Paginated"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/ProductGroupItem"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 
@@ -296,19 +264,9 @@ paths:
                   required: true
                   description: "Código do produto (ex.: 10080123)"
                   schema: { type: string }
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema: { type: integer, minimum: 1, default: 1 }
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–1000)"
-                  schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
-                - in: query
-                  name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-                  schema: { type: string, example: "G1_COMP asc" }
+                - $ref: "#/components/parameters/PageParam"
+                - $ref: "#/components/parameters/LimitParam"
+                - $ref: "#/components/parameters/OrderByParam"
             responses:
                 "200":
                     description: "Componentes do produto paginados"
@@ -316,15 +274,13 @@ paths:
                         application/json:
                             schema:
                                 allOf:
-                                    - $ref: "#/components/schemas/PaginatedBase"
+                                    - $ref: "#/components/schemas/Paginated"
                                     - type: object
                                       properties:
                                           data:
                                               type: array
                                               items:
-                                                  {
-                                                      $ref: "#/components/schemas/StructureLeaf",
-                                                  }
+                                                  $ref: "#/components/schemas/StructureLeaf"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
@@ -340,28 +296,23 @@ paths:
                   required: true
                   description: "Código do produto (ex.: 10080123)"
                   schema: { type: string }
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema: { type: integer, minimum: 1, default: 1 }
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–1000)"
-                  schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
-                - in: query
-                  name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-                  schema: { type: string, example: "fornecedor asc,loja asc" }
+                - $ref: "#/components/parameters/PageParam"
+                - $ref: "#/components/parameters/LimitParam"
+                - $ref: "#/components/parameters/OrderByParam"
             responses:
                 "200":
                     description: "Fornecedores do produto paginados"
                     content:
                         application/json:
                             schema:
-                                {
-                                    $ref: "#/components/schemas/PaginatedSuppliers",
-                                }
+                                allOf:
+                                    - $ref: "#/components/schemas/Paginated"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/Supplier"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
@@ -372,19 +323,9 @@ paths:
             summary: "Lista itens de pedidos (paginação + filtros)"
             tags: [Pedidos de Vendas]
             parameters:
-                - in: query
-                  name: page
-                  description: "Número da página (>= 1)"
-                  schema: { type: integer, minimum: 1, default: 1 }
-                - in: query
-                  name: limit
-                  description: "Tamanho da página (1–1000)"
-                  schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
-                - in: query
-                  name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-                  schema: { type: string, example: "C6_NUM desc,C6_ITEM asc" }
+                - $ref: "#/components/parameters/PageParam"
+                - $ref: "#/components/parameters/LimitParam"
+                - $ref: "#/components/parameters/OrderByParam"
                 - in: query
                   name: num
                   schema: { type: string }
@@ -430,9 +371,14 @@ paths:
                     content:
                         application/json:
                             schema:
-                                {
-                                    $ref: "#/components/schemas/PaginatedSalesOrderItems",
-                                }
+                                allOf:
+                                    - $ref: "#/components/schemas/Paginated"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/SalesOrderLine"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 
@@ -453,9 +399,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                {
-                                    $ref: "#/components/schemas/SalesOrderDetail",
-                                }
+                                $ref: "#/components/schemas/SalesOrderDetail"
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
@@ -476,7 +420,10 @@ paths:
                                     type: object
                                     properties:
                                         TableName: { type: string }
-                                        Description: { type: [string, "null"] }
+                                        Description:
+                                            {
+                                                $ref: "#/components/schemas/NullableString",
+                                            }
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 
@@ -504,7 +451,10 @@ paths:
                                     type: object
                                     properties:
                                         ColumnName: { type: string }
-                                        Description: { type: [string, "null"] }
+                                        Description:
+                                            {
+                                                $ref: "#/components/schemas/NullableString",
+                                            }
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 

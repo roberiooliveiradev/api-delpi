@@ -21,12 +21,6 @@ class ProductRepository extends BaseRepository {
     }
 
     async getProductByCode(code) {
-        // const rows = await super.getByValue(
-        //     "SB1010",
-        //     ["B1_COD", "B1_DESC", "B1_GRUPO"],
-        //     code,
-        //     "B1_COD"
-        // );
         const rows = await super.getByValue("SB1010", ["*"], code, "B1_COD");
         const product = rows?.[0];
         const suppliers = this.getSuppliersByProduct(code);
@@ -69,16 +63,12 @@ class ProductRepository extends BaseRepository {
         const offset = (page - 1) * limit;
 
         // Consulta direta na SG1010
-        const rows = await super.getAll(
-            "SG1010",
-            ["G1_COD", "G1_COMP", "G1_OBSERV"],
-            {
-                filters: { G1_COMP: code },
-                page,
-                limit,
-                orderBy,
-            }
-        );
+        const rows = await super.getAll("SG1010", ["*"], {
+            filters: { G1_COMP: code },
+            page,
+            limit,
+            orderBy,
+        });
 
         return rows;
     }
@@ -97,16 +87,7 @@ class ProductRepository extends BaseRepository {
             limit,
             orderBy,
         });
-
-        return {
-            ...result,
-            data: result.data.map((r) => ({
-                fornecedor: r.A5_FORNECE,
-                loja: r.A5_LOJA,
-                nomeFornecedor: r.A5_NOMEFOR,
-                partNumber: r.A5_CODPRF,
-            })),
-        };
+        return result;
     }
 }
 
