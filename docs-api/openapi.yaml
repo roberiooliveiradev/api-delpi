@@ -24,9 +24,6 @@ components:
             scheme: bearer
             bearerFormat: JWT
 
-    ########################################################
-    # (3) Respostas e modelo de erro (RFC 7807)
-    ########################################################
     schemas:
         ProblemDetails:
             type: object
@@ -37,9 +34,6 @@ components:
                 detail: { type: string }
                 instance: { type: string }
 
-        ######################################################
-        # (2) Schemas reutilizáveis e paginação genérica
-        ######################################################
         PageMeta:
             type: object
             properties:
@@ -69,7 +63,6 @@ components:
                 B1_GRUPO: { type: string }
                 B1_DESC: { type: string }
 
-        # Quebra de recursão para agradar ferramentas que não aceitam recursão infinita
         StructureLeaf:
             type: object
             properties:
@@ -82,10 +75,14 @@ components:
             type: object
             properties:
                 fornecedor:
-                    { type: string, description: "Código do fornecedor" }
-                loja: { type: string, description: "Loja do fornecedor" }
+                    type: string
+                    description: "Código do fornecedor"
+                loja:
+                    type: string
+                    description: "Loja do fornecedor"
                 nomeFornecedor:
-                    { type: string, description: "Nome do fornecedor" }
+                    type: string
+                    description: "Nome do fornecedor"
                 partNumber:
                     type: string
                     description: "Código do produto no fornecedor (partnumber)"
@@ -140,7 +137,6 @@ components:
                             C6_ENTREG: { type: [string, "null"] }
                             C6_VALOR: { type: number }
 
-        # Específicos de paginação usando composição
         PaginatedProducts:
             allOf:
                 - $ref: "#/components/schemas/PaginatedBase"
@@ -195,83 +191,6 @@ components:
                 application/problem+json:
                     schema: { $ref: "#/components/schemas/ProblemDetails" }
 
-    ########################################################
-    # (2) Parameters reutilizáveis (query e path)
-    ########################################################
-    parameters:
-        Page:
-            name: page
-            in: query
-            description: "Número da página (>= 1)"
-            schema: { type: integer, minimum: 1, default: 1 }
-
-        # Limite padrão (1–200) para a maioria dos endpoints
-        Limit:
-            name: limit
-            in: query
-            description: "Tamanho da página (1–200)"
-            schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-
-        # Limite maior exclusivo de /products (mantém comportamento original 1–1000)
-        LimitLarge:
-            name: limit
-            in: query
-            description: "Tamanho da página (1–1000)"
-            schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
-
-        OrderBy:
-            name: orderBy
-            in: query
-            description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
-            schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
-
-        CodePath:
-            name: code
-            in: path
-            required: true
-            description: "Código do produto (ex.: 10080123)"
-            schema: { type: string }
-
-        GroupPath:
-            name: group
-            in: path
-            required: true
-            description: "Código do grupo (ex.: CONEXOES)"
-            schema: { type: string }
-
-        TableNamePath:
-            name: tablename
-            in: path
-            required: true
-            description: "Nome da tabela (somente letras, números e _)"
-            schema:
-                type: string
-                pattern: "^[A-Za-z0-9_]+$"
-
-        NumPath:
-            name: num
-            in: path
-            required: true
-            description: "Código do pedido (C5/C6_NUM)"
-            schema: { type: string }
-
-    ########################################################
-    # (4) pathItems para padrões repetidos
-    ########################################################
-    pathItems:
-        ProductByCode:
-            parameters:
-                - $ref: "#/components/parameters/CodePath"
-        ProductByGroup:
-            parameters:
-                - $ref: "#/components/parameters/GroupPath"
-        SystemTableColumns:
-            parameters:
-                - $ref: "#/components/parameters/TableNamePath"
-        SalesOrderByNum:
-            parameters:
-                - $ref: "#/components/parameters/NumPath"
-
 paths:
     /products:
         get:
@@ -279,9 +198,19 @@ paths:
             summary: "Lista produtos (paginação + ordenação múltipla)"
             tags: [Produtos]
             parameters:
-                - $ref: "#/components/parameters/Page"
-                - $ref: "#/components/parameters/LimitLarge"
-                - $ref: "#/components/parameters/OrderBy"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema: { type: integer, minimum: 1, default: 1 }
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
             responses:
                 "200":
                     description: "Lista de produtos paginada"
@@ -295,11 +224,16 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /products/code/{code}:
-        $ref: "#/components/pathItems/ProductByCode"
         get:
             operationId: getProductByCode
             summary: "Produto por código"
             tags: [Produtos]
+            parameters:
+                - in: path
+                  name: code
+                  required: true
+                  description: "Código do produto (ex.: 10080123)"
+                  schema: { type: string }
             responses:
                 "200":
                     description: "Produto encontrado"
@@ -311,15 +245,29 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /products/group/{group}:
-        $ref: "#/components/pathItems/ProductByGroup"
         get:
             operationId: listProductsByGroup
             summary: "Produtos por grupo (paginação + ordenação múltipla)"
             tags: [Produtos]
             parameters:
-                - $ref: "#/components/parameters/Page"
-                - $ref: "#/components/parameters/Limit"
-                - $ref: "#/components/parameters/OrderBy"
+                - in: path
+                  name: group
+                  required: true
+                  description: "Código do grupo (ex.: CONEXOES)"
+                  schema: { type: string }
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema: { type: integer, minimum: 1, default: 1 }
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  schema: { type: string, example: "B1_DESC desc,B1_COD asc" }
             responses:
                 "200":
                     description: "Lista filtrada e paginada por grupo"
@@ -333,15 +281,29 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /products/code/{code}/structure:
-        $ref: "#/components/pathItems/ProductByCode"
         get:
             operationId: listProductStructure
             summary: "Lista a estrutura (BOM) de um produto com paginação"
             tags: [Produtos]
             parameters:
-                - $ref: "#/components/parameters/Page"
-                - $ref: "#/components/parameters/Limit"
-                - $ref: "#/components/parameters/OrderBy"
+                - in: path
+                  name: code
+                  required: true
+                  description: "Código do produto (ex.: 10080123)"
+                  schema: { type: string }
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema: { type: integer, minimum: 1, default: 1 }
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  schema: { type: string, example: "G1_COMP asc" }
             responses:
                 "200":
                     description: "Componentes do produto paginados"
@@ -363,15 +325,29 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /products/code/{code}/suppliers:
-        $ref: "#/components/pathItems/ProductByCode"
         get:
             operationId: listProductSuppliers
             summary: "Lista fornecedores de um produto com paginação"
             tags: [Produtos]
             parameters:
-                - $ref: "#/components/parameters/Page"
-                - $ref: "#/components/parameters/Limit"
-                - $ref: "#/components/parameters/OrderBy"
+                - in: path
+                  name: code
+                  required: true
+                  description: "Código do produto (ex.: 10080123)"
+                  schema: { type: string }
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema: { type: integer, minimum: 1, default: 1 }
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  schema: { type: string, example: "fornecedor asc,loja asc" }
             responses:
                 "200":
                     description: "Fornecedores do produto paginados"
@@ -391,9 +367,19 @@ paths:
             summary: "Lista itens de pedidos (paginação + filtros)"
             tags: [Pedidos de Vendas]
             parameters:
-                - $ref: "#/components/parameters/Page"
-                - $ref: "#/components/parameters/Limit"
-                - $ref: "#/components/parameters/OrderBy"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  schema: { type: integer, minimum: 1, default: 1 }
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  schema: { type: string, example: "C6_NUM desc,C6_ITEM asc" }
                 - in: query
                   name: num
                   schema: { type: string }
@@ -446,11 +432,16 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /sales-orders/{num}:
-        $ref: "#/components/pathItems/SalesOrderByNum"
         get:
             operationId: getSalesOrderByNum
             summary: "Pedido por código (cabeçalho + itens)"
             tags: [Pedidos de Vendas]
+            parameters:
+                - in: path
+                  name: num
+                  required: true
+                  description: "Código do pedido (C5/C6_NUM)"
+                  schema: { type: string }
             responses:
                 "200":
                     description: "Pedido encontrado"
@@ -485,11 +476,18 @@ paths:
                 "500": { $ref: "#/components/responses/InternalError" }
 
     /system/tables/{tablename}/columns:
-        $ref: "#/components/pathItems/SystemTableColumns"
         get:
             operationId: listColumns
             summary: "Lista colunas de uma tabela (ordem física)"
             tags: [Sistema]
+            parameters:
+                - in: path
+                  name: tablename
+                  required: true
+                  description: "Nome da tabela (somente letras, números e _)"
+                  schema:
+                      type: string
+                      pattern: "^[A-Za-z0-9_]+$"
             responses:
                 "200":
                     description: "Colunas e descrições (quando houver)"

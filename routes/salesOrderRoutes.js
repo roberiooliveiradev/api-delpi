@@ -11,7 +11,7 @@ const repo = new SalesOrdersRepository();
 const listQuerySchema = z.object({
     query: z.object({
         page: z.coerce.number().int().min(1).default(1).optional(),
-        limit: z.coerce.number().int().min(1).max(200).default(50).optional(),
+        limit: z.coerce.number().int().min(1).max(1000).default(50).optional(),
         orderBy: z.string().optional(), // CSV ex: "C6_NUM asc,C6_ITEM asc"
         num: z.string().optional(),
         cli: z.string().optional(),
@@ -53,8 +53,8 @@ router.get(
     validate(listQuerySchema),
     asyncHandler(async (req, res) => {
         const {
-            page = 1,
-            limit = 50,
+            page,
+            limit,
             orderBy,
             num,
             cli,
