@@ -34,7 +34,10 @@ export function buildSafeOrderBy(orderBy, fallbackColumn = "1") {
 
     const safeParts = parts.map((raw) => {
         const { column, dir } = toPair(raw);
-        const safeCol = sanitizeIdentifier(String(column));
+        // se for alias de coluna calculada, não precisa sanitizar
+        const safeCol = /^[A-Za-z0-9_]+$/.test(column)
+            ? sanitizeIdentifier(String(column))
+            : column;
         const safeDir =
             dir && /^(ASC|DESC)$/i.test(dir) ? dir.toUpperCase() : "ASC";
         return `${safeCol} ${safeDir}`;
@@ -67,6 +70,7 @@ class BaseRepository {
      * - useDeletionGuard (default: true) => aplica ISNULL(D_E_L_E_T_, '') <> '*'
      * - deletionColumn (default: "D_E_L_E_T_")
      * - likeCollation (default: "Latin1_General_CI_AI") => usado nos filtros LIKE
+     * - extraColumns => colunas calculadas adicionais no SELECT
      */
     async getAll(table, columnsArray = ["*"], options = {}) {
         const pool = await poolPromise;
@@ -79,6 +83,7 @@ class BaseRepository {
             useDeletionGuard = true,
             deletionColumn = "D_E_L_E_T_",
             likeCollation = "Latin1_General_CI_AI",
+            extraColumns = [], // <<< NOVO
         } = options;
 
         // Validação de paginação
@@ -104,6 +109,12 @@ class BaseRepository {
                 ? "*"
                 : columnsArray.map(sanitizeIdentifier).join(", ");
 
+        // adiciona colunas extras no SELECT
+        const allColumns =
+            extraColumns.length > 0
+                ? `${safeColumns}, ${extraColumns.join(", ")}`
+                : safeColumns;
+
         // WHERE dinâmico
         const whereClauses = [];
         const requestData = pool.request();
@@ -112,6 +123,28 @@ class BaseRepository {
 
         for (const [rawKey, rawFilter] of Object.entries(filters)) {
             const col = sanitizeIdentifier(rawKey);
+
+            // Filtro OR
+            if (rawKey === "or" && Array.isArray(rawFilter)) {
+                const orClauses = [];
+                rawFilter.forEach((sub, i) => {
+                    const [subCol, subFilter] = Object.entries(sub)[0];
+                    const col = sanitizeIdentifier(subCol);
+                    if (subFilter.op === "like") {
+                        const name = `param_${col}_${i}`;
+                        const colExpr = likeCollation
+                            ? `${col} COLLATE ${likeCollation}`
+                            : col;
+                        orClauses.push(`${colExpr} LIKE @${name}`);
+                        requestData.input(name, subFilter.value);
+                        requestCount.input(name, subFilter.value);
+                    }
+                });
+                if (orClauses.length) {
+                    whereClauses.push(`(${orClauses.join(" OR ")})`);
+                }
+                continue;
+            }
 
             if (
                 rawFilter &&
@@ -140,7 +173,6 @@ class BaseRepository {
                     }
                     case "in": {
                         if (!Array.isArray(value) || value.length === 0) {
-                            // IN vazio => 0 linhas
                             whereClauses.push("1 = 0");
                             break;
                         }
@@ -170,6 +202,22 @@ class BaseRepository {
                         requestCount.input(name, value);
                         break;
                     }
+                    case "soundex": {
+                        const name = `param_${col}`;
+                        whereClauses.push(
+                            `SOUNDEX(${col}) = SOUNDEX(@${name})`
+                        );
+                        requestData.input(name, value);
+                        requestCount.input(name, value);
+                        break;
+                    }
+                    case "difference": {
+                        const name = `param_${col}`;
+                        whereClauses.push(`DIFFERENCE(${col}, @${name}) >= 3`);
+                        requestData.input(name, value);
+                        requestCount.input(name, value);
+                        break;
+                    }
                     default:
                         throw new Error(
                             `Operador de filtro não suportado: ${op}`
@@ -183,7 +231,7 @@ class BaseRepository {
             }
         }
 
-        // Guard de exclusão lógica (aplicado SEMPRE quando habilitado)
+        // Guard de exclusão lógica
         const allWhere = [...whereClauses];
         if (useDeletionGuard) {
             const delCol = sanitizeIdentifier(deletionColumn);
@@ -198,8 +246,8 @@ class BaseRepository {
         const countResult = await requestCount.query(countQuery);
         const total = Number(countResult.recordset?.[0]?.total ?? 0);
 
-        // SELECT de dados (paginada se limit > 0)
-        let dataQuery = `SELECT ${safeColumns} FROM ${safeTable}`;
+        // SELECT de dados
+        let dataQuery = `SELECT ${allColumns} FROM ${safeTable}`;
         if (allWhere.length > 0) {
             dataQuery += ` WHERE ${allWhere.join(" AND ")}`;
         }
@@ -230,7 +278,6 @@ class BaseRepository {
         };
     }
 
-    // Igualdade simples (usado por getProductByCode, etc.)
     async getByValue(table, columnsArray = ["*"], keyValue, keyColumn = "id") {
         const pool = await poolPromise;
 

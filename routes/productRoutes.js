@@ -56,6 +56,28 @@ const descriptionParamsSchema = z.object({
     query: listQuerySchema.shape.query,
 });
 
+// Novo schema para /structure
+const structureSchema = z.object({
+    params: z.object({
+        code: z.string().min(1, "Informe o código do produto"),
+    }),
+    query: z.object({
+        // recursivo por padrão
+        recursive: z.coerce.boolean().default(true).optional(),
+        // sentido: where-used (G1_COMP = code) | explosion (G1_COD = code)
+        direction: z
+            .enum(["where-used", "explosion"])
+            .default("where-used")
+            .optional(),
+        // limite de profundidade quando recursivo
+        maxDepth: z.coerce.number().int().min(1).max(50).default(10).optional(),
+        // só usados quando recursive=false
+        page: z.coerce.number().int().min(1).optional(),
+        limit: z.coerce.number().int().min(1).max(1000).optional(),
+        orderBy: z.string().optional(),
+    }),
+});
+
 // GET /api/products  -> { data, page, limit, total }
 router.get(
     "/",
@@ -93,7 +115,7 @@ router.get(
     validate(descriptionParamsSchema),
     asyncHandler(async (req, res) => {
         const { description } = req.params;
-        const { page = 1, limit = 50, orderBy } = req.query; // <- query, não params
+        const { page = 1, limit = 50, orderBy } = req.query; // <- query
         const order = parseOrderByCSV(orderBy) || ["B1_DESC ASC"];
 
         const result = await repo.getProductsByDescription({
@@ -107,28 +129,42 @@ router.get(
     })
 );
 
-// GET /api/products/code/:code/structure -> { data, page, limit, total }
+// GET /api/products/code/:code/structure
+// - recursive=true (padrão): retorna ÁRVORE { code, description, type, qty, um, level, children[] }
+// - recursive=false: retorna UM NÍVEL com { data, page, limit, total }
 router.get(
     "/code/:code/structure",
-    validate(
-        z.object({
-            params: z.object({
-                code: z.string().min(1, "Informe o código do produto"),
-            }),
-            query: listQuerySchema.shape.query,
-        })
-    ),
+    validate(structureSchema),
     asyncHandler(async (req, res) => {
         const { code } = req.params;
-        const { page = 1, limit = 50, orderBy } = req.query;
-        const order = parseOrderByCSV(orderBy) || ["G1_COD ASC"];
+        const {
+            recursive = true,
+            direction = "where-used",
+            maxDepth = 10,
+            page,
+            limit,
+            orderBy,
+        } = req.query;
 
-        const result = await repo.getStructureByCode(code, {
-            page: Number(page),
-            limit: Number(limit),
+        if (recursive) {
+            const tree = await repo.getStructureByCode(code, {
+                recursive: true,
+                direction,
+                maxDepth: Number(maxDepth),
+            });
+            return res.status(200).json(tree);
+        }
+
+        // modo não-recursivo: respeita paginação/ordem
+        const order = parseOrderByCSV(orderBy) || ["G1_COD ASC"];
+        const list = await repo.getStructureByCode(code, {
+            recursive: false,
+            direction,
+            page: Number(page ?? 1),
+            limit: Number(limit ?? 50),
             orderBy: order,
         });
-        res.status(200).json(result);
+        return res.status(200).json(list);
     })
 );
 

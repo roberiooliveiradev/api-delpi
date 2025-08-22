@@ -348,7 +348,12 @@ paths:
     /products/code/{code}/structure:
         get:
             operationId: listProductStructure
-            summary: "Lista a estrutura (BOM) de um produto com paginação"
+            summary: "Estrutura (BOM) de um produto — pais (where-used) ou filhos (explosion)"
+            description: >
+                Retorna a BOM do produto. direction=where-used lista pais
+                (SG1010.G1_COMP=code); explosion lista filhos (SG1010.G1_COD=code).
+                recursive=true (padrão) retorna árvore até maxDepth; false retorna
+                apenas um nível com paginação/ordem.
             tags: [Produtos]
             parameters:
                 - in: path
@@ -356,42 +361,190 @@ paths:
                   required: true
                   description: "Código do produto (ex.: 10080123)"
                   schema: { type: string }
+
+                - in: query
+                  name: recursive
+                  description: "Se true, retorna árvore recursiva; se false, apenas um nível paginado"
+                  required: false
+                  schema: { type: boolean, default: true }
+                  style: form
+                  explode: true
+
+                - in: query
+                  name: direction
+                  description: >
+                      Sentido da busca:
+                      - **where-used** → retorna **pais**: quem usa o código informado (SG1010.G1_COMP = code)
+                      - **explosion**  → retorna **filhos**: componentes do código informado (SG1010.G1_COD = code)
+                  required: false
+                  schema:
+                      type: string
+                      enum: ["where-used", "explosion"]
+                      default: "where-used"
+                  style: form
+                  explode: true
+
+                - in: query
+                  name: maxDepth
+                  description: "Profundidade máxima da árvore (usado quando recursive=true)"
+                  required: false
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 50
+                      default: 10
+                  style: form
+                  explode: true
+
+                # Os três parâmetros abaixo só têm efeito quando recursive=false
                 - in: query
                   name: page
-                  description: "Número da página (>= 1)"
+                  description: "Número da página (>= 1) — usado apenas se recursive=false"
                   required: false
                   schema: { type: integer, minimum: 1, default: 1 }
                   style: form
                   explode: true
+
                 - in: query
                   name: limit
-                  description: "Tamanho da página (1–1000)"
+                  description: "Tamanho da página (1–1000) — usado apenas se recursive=false"
                   required: false
                   schema:
-                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+                      default: 50
                   style: form
                   explode: true
+
                 - in: query
                   name: orderBy
-                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc — usado apenas se recursive=false"
                   required: false
                   schema: { type: string }
                   style: form
                   explode: true
+
             responses:
                 "200":
-                    description: "Componentes do produto paginados"
+                    description: "Estrutura do produto (árvore recursiva ou lista paginada de um nível)"
                     content:
                         application/json:
-                            schema:
-                                allOf:
-                                    - $ref: "#/components/schemas/Paginated"
-                                    - type: object
-                                      properties:
-                                          data:
-                                              type: array
-                                              items:
-                                                  $ref: "#/components/schemas/StructureLeaf"
+                            oneOf:
+                                # Resposta quando recursive=true (árvore recursiva)
+                                - type: object
+                                  properties:
+                                      code:
+                                          {
+                                              type: string,
+                                              description: "Código deste nó",
+                                          }
+                                      description:
+                                          anyOf:
+                                              - { type: string }
+                                              - { type: "null" }
+                                      type:
+                                          anyOf:
+                                              - { type: string }
+                                              - { type: "null" }
+                                      qty:
+                                          type: number
+                                          nullable: true
+                                          description: "Quantidade que liga ao pai (se houver)"
+                                      um:
+                                          type: string
+                                          nullable: true
+                                          description: "Unidade do componente (B1_UM do SB1010)"
+                                      level:
+                                          {
+                                              type: integer,
+                                              description: "Nível na árvore (raiz=0)",
+                                          }
+                                      parent:
+                                          type: string
+                                          nullable: true
+                                          description: "Código do pai (ou null na raiz)"
+                                      children:
+                                          type: array
+                                          description: "Filhos deste nó (pais se where-used, filhos se explosion)"
+                                          items:
+                                              type: object
+                                              properties:
+                                                  code: { type: string }
+                                                  description:
+                                                      anyOf:
+                                                          - { type: string }
+                                                          - { type: "null" }
+                                                  type:
+                                                      anyOf:
+                                                          - { type: string }
+                                                          - { type: "null" }
+                                                  qty:
+                                                      {
+                                                          type: number,
+                                                          nullable: true,
+                                                      }
+                                                  um:
+                                                      {
+                                                          type: string,
+                                                          nullable: true,
+                                                      }
+                                                  level: { type: integer }
+                                                  parent:
+                                                      type: string
+                                                      nullable: true
+                                                  children:
+                                                      type: array
+                                                      items:
+                                                          # nó recursivo inline (mesma estrutura)
+                                                          $ref: "#/paths/~1products~1code~1{code}~1structure/get/responses/200/content/application~1json/oneOf/0" # self-recursive
+
+                                # Resposta quando recursive=false (lista paginada de um nível)
+                                - type: object
+                                  properties:
+                                      page: { type: integer, example: 1 }
+                                      limit: { type: integer, example: 50 }
+                                      total: { type: integer, example: 123 }
+                                      data:
+                                          type: array
+                                          items:
+                                              type: object
+                                              properties:
+                                                  G1_COD:
+                                                      {
+                                                          type: string,
+                                                          description: "Código do produto pai",
+                                                      }
+                                                  G1_COMP:
+                                                      {
+                                                          type: string,
+                                                          description: "Código do componente",
+                                                      }
+                                                  G1_QUANT:
+                                                      {
+                                                          anyOf:
+                                                              [
+                                                                  {
+                                                                      type: number,
+                                                                  },
+                                                                  {
+                                                                      type: "null",
+                                                                  },
+                                                              ],
+                                                      }
+                                                  G1_OBSERV:
+                                                      {
+                                                          anyOf:
+                                                              [
+                                                                  {
+                                                                      type: string,
+                                                                  },
+                                                                  {
+                                                                      type: "null",
+                                                                  },
+                                                              ],
+                                                      }
+
                 "401": { $ref: "#/components/responses/UnauthorizedError" }
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
