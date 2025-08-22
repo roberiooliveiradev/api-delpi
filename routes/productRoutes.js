@@ -49,6 +49,13 @@ const groupParamsSchema = z.object({
     query: listQuerySchema.shape.query,
 });
 
+const descriptionParamsSchema = z.object({
+    params: z.object({
+        description: z.string().min(1, "Informe a descrição"),
+    }),
+    query: listQuerySchema.shape.query,
+});
+
 // GET /api/products  -> { data, page, limit, total }
 router.get(
     "/",
@@ -76,6 +83,26 @@ router.get(
         const result = await repo.getProductByCode(code);
         if (!result)
             throw new ApiError(404, "NOT_FOUND", "Produto não encontrado");
+        res.status(200).json(result);
+    })
+);
+
+// GET /api/products/description/:description -> { data, page, limit, total }
+router.get(
+    "/description/:description",
+    validate(descriptionParamsSchema),
+    asyncHandler(async (req, res) => {
+        const { description } = req.params;
+        const { page = 1, limit = 50, orderBy } = req.query; // <- query, não params
+        const order = parseOrderByCSV(orderBy) || ["B1_DESC ASC"];
+
+        const result = await repo.getProductsByDescription({
+            description,
+            page: Number(page),
+            limit: Number(limit),
+            orderBy: order,
+        });
+
         res.status(200).json(result);
     })
 );

@@ -24,6 +24,8 @@ components:
             scheme: bearer
             bearerFormat: JWT
 
+    # Mantemos os parâmetros em components apenas como referência/documentação,
+    # porém TODAS as rotas usam parâmetros inline para máxima compatibilidade.
     parameters:
         PageParam:
             in: query
@@ -48,7 +50,6 @@ components:
             description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
             schema:
                 type: string
-                # example: "COLUNA1 desc,COLUNA2 asc"
 
     schemas:
         ProblemDetails:
@@ -91,6 +92,7 @@ components:
         ProductFull:
             type: object
             description: "Registro completo de produto"
+            properties: {}
             additionalProperties: true
 
         ProductGroupItem:
@@ -110,6 +112,8 @@ components:
 
         Supplier:
             type: object
+            description: "Registro de fornecedor (dinâmico)"
+            properties: {}
             additionalProperties: true
 
         SalesOrderLine:
@@ -117,10 +121,9 @@ components:
             properties:
                 C6_NUM: { type: string, description: "Código do pedido" }
                 C5_EMISSAO:
-                    {
-                        anyOf:
-                            [{ type: string, format: date }, { type: "null" }],
-                    }
+                    anyOf:
+                        - { type: string, format: date }
+                        - { type: "null" }
                 C6_FILIAL: { type: string }
                 C6_CLI: { type: string }
                 C6_LOJA: { type: string }
@@ -180,9 +183,28 @@ paths:
             summary: "Lista produtos (paginação + ordenação múltipla)"
             tags: [Produtos]
             parameters:
-                - $ref: "#/components/parameters/PageParam"
-                - $ref: "#/components/parameters/LimitParam"
-                - $ref: "#/components/parameters/OrderByParam"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
             responses:
                 "200":
                     description: "Lista de produtos paginada"
@@ -222,6 +244,57 @@ paths:
                 "404": { $ref: "#/components/responses/NotFoundError" }
                 "500": { $ref: "#/components/responses/InternalError" }
 
+    /products/description/{description}:
+        get:
+            operationId: getProductsByDescription
+            summary: "Buscar produtos por descrição"
+            tags: [Produtos]
+            parameters:
+                - in: path
+                  name: description
+                  required: true
+                  description: "Descrição do produto (ex: CABO 2MM2)"
+                  schema: { type: string }
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
+            responses:
+                "200":
+                    description: "Lista de produtos paginada"
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/Paginated"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/Product"
+                "401": { $ref: "#/components/responses/UnauthorizedError" }
+                "404": { $ref: "#/components/responses/NotFoundError" }
+                "500": { $ref: "#/components/responses/InternalError" }
+
     /products/group/{group}:
         get:
             operationId: listProductsByGroup
@@ -233,9 +306,28 @@ paths:
                   required: true
                   description: "Código do grupo (ex.: CONEXOES)"
                   schema: { type: string }
-                - $ref: "#/components/parameters/PageParam"
-                - $ref: "#/components/parameters/LimitParam"
-                - $ref: "#/components/parameters/OrderByParam"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
             responses:
                 "200":
                     description: "Lista filtrada e paginada por grupo"
@@ -264,9 +356,28 @@ paths:
                   required: true
                   description: "Código do produto (ex.: 10080123)"
                   schema: { type: string }
-                - $ref: "#/components/parameters/PageParam"
-                - $ref: "#/components/parameters/LimitParam"
-                - $ref: "#/components/parameters/OrderByParam"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
             responses:
                 "200":
                     description: "Componentes do produto paginados"
@@ -296,9 +407,28 @@ paths:
                   required: true
                   description: "Código do produto (ex.: 10080123)"
                   schema: { type: string }
-                - $ref: "#/components/parameters/PageParam"
-                - $ref: "#/components/parameters/LimitParam"
-                - $ref: "#/components/parameters/OrderByParam"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
             responses:
                 "200":
                     description: "Fornecedores do produto paginados"
@@ -323,9 +453,28 @@ paths:
             summary: "Lista itens de pedidos (paginação + filtros)"
             tags: [Pedidos de Vendas]
             parameters:
-                - $ref: "#/components/parameters/PageParam"
-                - $ref: "#/components/parameters/LimitParam"
-                - $ref: "#/components/parameters/OrderByParam"
+                - in: query
+                  name: page
+                  description: "Número da página (>= 1)"
+                  required: false
+                  schema: { type: integer, minimum: 1, default: 1 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: limit
+                  description: "Tamanho da página (1–1000)"
+                  required: false
+                  schema:
+                      { type: integer, minimum: 1, maximum: 1000, default: 50 }
+                  style: form
+                  explode: true
+                - in: query
+                  name: orderBy
+                  description: "CSV com colunas e direção. Ex.: COLUNA1 desc,COLUNA2 asc"
+                  required: false
+                  schema: { type: string }
+                  style: form
+                  explode: true
                 - in: query
                   name: num
                   schema: { type: string }

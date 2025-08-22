@@ -36,12 +36,7 @@ class ProductRepository extends BaseRepository {
         if (visited.has(code)) return [];
         visited.add(code);
 
-        const nodes = await super.getByValue(
-            "SG1010",
-            ["G1_COD", "G1_COMP", "G1_OBSERV"],
-            code,
-            "G1_COMP"
-        );
+        const nodes = await super.getByValue("SG1010", ["*"], code, "G1_COMP");
 
         const enriched = await Promise.all(
             nodes.map(async (n) => {
@@ -60,8 +55,6 @@ class ProductRepository extends BaseRepository {
         code,
         { page = 1, limit = 50, orderBy = "G1_COD ASC" } = {}
     ) {
-        const offset = (page - 1) * limit;
-
         // Consulta direta na SG1010
         const rows = await super.getAll("SG1010", ["*"], {
             filters: { G1_COMP: code },
@@ -88,6 +81,25 @@ class ProductRepository extends BaseRepository {
             orderBy,
         });
         return result;
+    }
+
+    /**
+     * Pesquisar produtos pela descrição
+     * Consulta SB1010 pela coluna B1_DESC
+     */
+    async getProductsByDescription({ description, page, limit, orderBy }) {
+        const term = `%${description.split(" ").join(" %")}%`; // adiciona curingas
+
+        const columns = ["B1_GRUPO", "B1_COD", "B1_DESC", "B1_TIPO"];
+        const results = await super.getAll("SB1010", columns, {
+            filters: {
+                B1_DESC: { op: "like", value: term },
+            },
+            page,
+            limit,
+            orderBy,
+        });
+        return results;
     }
 }
 

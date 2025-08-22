@@ -43,19 +43,43 @@ export function buildSafeOrderBy(orderBy, fallbackColumn = "1") {
     return safeParts.join(", ");
 }
 
+// Função utilitária para remover espaços de todos os campos string
+function trimObjectStrings(obj) {
+    return Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [
+            key,
+            typeof value === "string" ? value.trim() : value,
+        ])
+    );
+}
+
+// Caso seja uma lista de objetos
+function trimRecordset(recordset) {
+    return recordset.map((item) => trimObjectStrings(item));
+}
+
 class BaseRepository {
     /**
      * Retorna envelope paginado:
      *  { data, page, limit, total }
      *
-     * Melhorias:
-     *  - Validação de paginação
-     *  - Filtros estendidos: eq, like, in, gte, lte
-     *  - ORDER BY múltiplas colunas
+     * Opções adicionais:
+     * - useDeletionGuard (default: true) => aplica ISNULL(D_E_L_E_T_, '') <> '*'
+     * - deletionColumn (default: "D_E_L_E_T_")
+     * - likeCollation (default: "Latin1_General_CI_AI") => usado nos filtros LIKE
      */
     async getAll(table, columnsArray = ["*"], options = {}) {
         const pool = await poolPromise;
-        const { filters = {}, page, limit, orderBy } = options;
+
+        const {
+            filters = {},
+            page,
+            limit,
+            orderBy,
+            useDeletionGuard = true,
+            deletionColumn = "D_E_L_E_T_",
+            likeCollation = "Latin1_General_CI_AI",
+        } = options;
 
         // Validação de paginação
         if (limit !== undefined && limit !== null) {
@@ -80,7 +104,7 @@ class BaseRepository {
                 ? "*"
                 : columnsArray.map(sanitizeIdentifier).join(", ");
 
-        // WHERE dinâmico (mesma construção será usada no COUNT e na SELECT paginada)
+        // WHERE dinâmico
         const whereClauses = [];
         const requestData = pool.request();
         const requestCount = pool.request();
@@ -106,7 +130,10 @@ class BaseRepository {
                     }
                     case "like": {
                         const name = `param_${col}`;
-                        whereClauses.push(`${col} LIKE @${name}`);
+                        const colExpr = likeCollation
+                            ? `${col} COLLATE ${likeCollation}`
+                            : col;
+                        whereClauses.push(`${colExpr} LIKE @${name}`);
                         requestData.input(name, value);
                         requestCount.input(name, value);
                         break;
@@ -156,19 +183,25 @@ class BaseRepository {
             }
         }
 
+        // Guard de exclusão lógica (aplicado SEMPRE quando habilitado)
+        const allWhere = [...whereClauses];
+        if (useDeletionGuard) {
+            const delCol = sanitizeIdentifier(deletionColumn);
+            allWhere.push(`ISNULL(${delCol}, '') <> '*'`);
+        }
+
         // COUNT(*) com os mesmos filtros
         let countQuery = `SELECT COUNT(*) AS total FROM ${safeTable}`;
-        if (whereClauses.length) {
-            whereClauses.push(`ISNULL(D_E_L_E_T_, '') <> '*'`);
-            countQuery += ` WHERE ${whereClauses.join(" AND ")}`;
+        if (allWhere.length > 0) {
+            countQuery += ` WHERE ${allWhere.join(" AND ")}`;
         }
         const countResult = await requestCount.query(countQuery);
         const total = Number(countResult.recordset?.[0]?.total ?? 0);
 
         // SELECT de dados (paginada se limit > 0)
         let dataQuery = `SELECT ${safeColumns} FROM ${safeTable}`;
-        if (whereClauses.length) {
-            dataQuery += ` WHERE ${whereClauses.join(" AND ")}`;
+        if (allWhere.length > 0) {
+            dataQuery += ` WHERE ${allWhere.join(" AND ")}`;
         }
 
         const fallbackOrderBy =
@@ -213,21 +246,6 @@ class BaseRepository {
         const result = await pool.request().input("id", keyValue).query(query);
         return trimRecordset(result.recordset);
     }
-}
-
-// Função utilitária para remover espaços de todos os campos string
-function trimObjectStrings(obj) {
-    return Object.fromEntries(
-        Object.entries(obj).map(([key, value]) => [
-            key,
-            typeof value === "string" ? value.trim() : value,
-        ])
-    );
-}
-
-// Caso seja uma lista de objetos
-function trimRecordset(recordset) {
-    return recordset.map((item) => trimObjectStrings(item));
 }
 
 export default BaseRepository;
